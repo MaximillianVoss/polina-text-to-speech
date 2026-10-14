@@ -29,7 +29,7 @@ def destination(raw):
     if not raw or any(c in raw for c in '\n\r\t\x00') or '..' in Path(raw).parts:
         fail('Небезопасный путь назначения.')
     value = Path(os.path.abspath(raw))
-    if value.name in ('', '.', '..', '.git'):
+    if value.name.lower() in ('', '.', '..', '.git') or value.name.endswith((' ', '.')):
         fail('Нужна отдельная папка назначения.')
     if not value.parent.is_dir():
         fail('Сначала создайте родительскую папку назначения.')
@@ -90,14 +90,16 @@ def extract(archive_path, target):
         # This marker identifies the optional upstream downloader bundled by
         # this delivery. Application folders with the same name are preserved.
         strip_tooling = any(item.name == 'delivery-tools/.upstream-tools' and item.isfile()
-                            and item.size == len(b'clean-export-tooling/v1\n')
-                            and archive.extractfile(item).read() == b'clean-export-tooling/v1\n'
+                            and item.size in (len(b'clean-export-tooling/v1\n'), len(b'clean-export-tooling/v1\r\n'))
+                            and archive.extractfile(item).read() in (b'clean-export-tooling/v1\n', b'clean-export-tooling/v1\r\n')
                             for item in members)
         retained = []
         for item in members:
             name = PurePosixPath(item.name)
-            if name.is_absolute() or '..' in name.parts or '\\' in item.name or any(c in item.name for c in '\r\n\t\x00'):
+            if name.is_absolute() or '..' in name.parts or '\\' in item.name or ':' in item.name or any(c in item.name for c in '\r\n\t\x00'):
                 fail('Архив содержит небезопасный путь.')
+            if any(part.endswith((' ', '.')) or re.fullmatch(r'(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?', part, re.I) for part in name.parts):
+                fail('Архив содержит непереносимое имя Windows.')
             if excluded(name.parts):
                 continue
             if name.parts == ('.delivery-source.json',) or (strip_tooling and name.parts[0] == 'delivery-tools'):
@@ -159,9 +161,19 @@ def publish(payload, raw_destination, init_git):
             if init_git and relative.parts[0] == '.git':
                 continue
             fail('В новой копии остались Git metadata.')
-    # Same-volume rename replaces only an empty directory. A competing nonempty
-    # folder raises OSError; neither it nor any user file is removed.
-    os.rename(payload, final)
+    # POSIX rename replaces an empty directory atomically. Windows requires
+    # rmdir first: the kernel refuses it if any file appeared after validation.
+    # A competing replacement folder then makes rename fail, never overwrite.
+    removed_empty = False
+    if os.name == 'nt' and final.exists():
+        final.rmdir()
+        removed_empty = True
+    try:
+        os.rename(payload, final)
+    except OSError:
+        if removed_empty and not final.exists():
+            final.mkdir()
+        raise
 
 def catalog(filename, wanted=None):
     records = []
@@ -192,7 +204,9 @@ def main():
     if mode == 'source-path':
         print(source_path(args[0]))
     elif mode == 'destination':
-        print(destination(args[0]))
+        # Bash/dirname must receive forward slashes even with native Windows
+        # Python under Git Bash, so the temporary dir stays on the same volume.
+        print(destination(args[0]).as_posix())
     elif mode == 'extract':
         extract(*args)
     elif mode == 'publish':
@@ -203,6 +217,10 @@ def main():
         fail('Неизвестная операция.')
 
 if __name__ == '__main__':
+    # Native Windows Python under Git Bash must emit UTF-8 with LF. CRLF
+    # would leave a trailing CR in Bash command substitutions and TSV fields.
+    sys.stdout.reconfigure(encoding='utf-8', newline='\n')
+    sys.stderr.reconfigure(encoding='utf-8', newline='\n')
     try:
         main()
     except (ValueError, OSError, tarfile.TarError) as error:

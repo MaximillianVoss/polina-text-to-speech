@@ -2,5 +2,10 @@
   "schema": "polina-public-delivery/v1",
   "projectId": "mob-speech",
   "repository": "MaximillianVoss/polina-text-to-speech",
-  "launcherSha256": "e8c2f06f448acd65745756321232b342dd2e547f3cb927ef005fedf4ae5c5efe"
+  "launcherSha256": "e8c2f06f448acd65745756321232b342dd2e547f3cb927ef005fedf4ae5c5efe",
+  "exporterSha256": {
+    "export-project.sh": "e48808753f3da21491dbdae96b181aeee7031218c0d65e69b23850a5c47aa58e",
+    "export_project.py": "7a7b83e91924c5921d92c7238cad242fe20dbe2b2a1603259095915c28f4024f"
+  },
+  "deliveryRevision": 2
 }

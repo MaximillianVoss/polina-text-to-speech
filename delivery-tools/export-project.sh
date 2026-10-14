@@ -51,18 +51,27 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 command -v git >/dev/null 2>&1 || die "Git не найден."
-command -v python3 >/dev/null 2>&1 || die "Python 3 не найден; установите Python 3.9+."
-python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' || die "нужен Python 3.9+."
+python_cmd=()
+for python_candidate in python python3; do
+  if command -v "$python_candidate" >/dev/null 2>&1 && "$python_candidate" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' >/dev/null 2>&1; then
+    python_cmd=("$python_candidate")
+    break
+  fi
+done
+if [[ ${#python_cmd[@]} -eq 0 ]] && command -v py >/dev/null 2>&1 && py -3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' >/dev/null 2>&1; then
+  python_cmd=(py -3)
+fi
+[[ ${#python_cmd[@]} -gt 0 ]] || die "Нужен Python 3.9+: команда python, python3 или py -3."
 [[ -f "$script_dir/export_project.py" ]] || die "рядом должен находиться export_project.py."
 if [[ -n "$catalog" ]]; then
   [[ $explicit_source -eq 0 ]] || die "не смешивайте --catalog с --repo/--ref/--path."
   [[ -f "$catalog" ]] || die "каталог не найден."
   if [[ $list_only -eq 1 ]]; then
-    python3 "$script_dir/export_project.py" catalog "$catalog"
+    "${python_cmd[@]}" "$script_dir/export_project.py" catalog "$catalog"
     exit 0
   fi
   [[ -n "$project_id" ]] || die "укажите --project ID."
-  resolved="$(python3 "$script_dir/export_project.py" catalog "$catalog" "$project_id")"
+  resolved="$("${python_cmd[@]}" "$script_dir/export_project.py" catalog "$catalog" "$project_id")"
   IFS=$'\t' read -r repo ref project_path <<< "$resolved"
 elif [[ -n "$project_id" || $list_only -eq 1 ]]; then
   die "--project и --list требуют --catalog."
@@ -71,8 +80,8 @@ fi
 [[ "$repo" != -* && "$ref" != -* ]] || die "URL/ref не могут начинаться с -."
 [[ "$ref" != *$'\n'* && "$ref" != *$'\r'* && "$repo" != *$'\n'* ]] || die "URL/ref содержат перевод строки."
 [[ "$repo" != http*://*@* ]] || die "не помещайте пароль/token в URL; используйте SSH или credential helper."
-project_path="$(python3 "$script_dir/export_project.py" source-path "$project_path")"
-destination="$(python3 "$script_dir/export_project.py" destination "$destination")"
+project_path="$("${python_cmd[@]}" "$script_dir/export_project.py" source-path "$project_path")"
+destination="$("${python_cmd[@]}" "$script_dir/export_project.py" destination "$destination")"
 parent="$(dirname -- "$destination")"
 work="$(mktemp -d "$parent/.project-export.XXXXXX")"
 cleanup() {
@@ -98,12 +107,12 @@ if grep -q '^160000 ' "$work/tree.txt"; then
   die "в проекте есть submodule: подготовьте самостоятельный пакет с его исходниками."
 fi
 git --git-dir="$work/source.git" archive --format=tar "$tree" > "$work/source.tar"
-python3 "$script_dir/export_project.py" extract "$work/source.tar" "$work/payload"
+"${python_cmd[@]}" "$script_dir/export_project.py" extract "$work/source.tar" "$work/payload"
 if [[ $init_git -eq 1 ]]; then
   git -c init.templateDir= init --quiet --template= "$work/payload"
   [[ -z "$(git -C "$work/payload" remote)" ]] || die "новый Git неожиданно содержит remote."
 fi
-python3 "$script_dir/export_project.py" publish "$work/payload" "$destination" "$init_git"
+"${python_cmd[@]}" "$script_dir/export_project.py" publish "$work/payload" "$destination" "$init_git"
 printf 'Готово: %s\n' "$destination"
 if [[ $init_git -eq 1 ]]; then
   echo 'Создан новый локальный Git без remote и без исходной истории.'
