@@ -1,0 +1,6 @@
+{
+  "schema": "polina-public-delivery/v1",
+  "projectId": "mob-speech",
+  "repository": "MaximillianVoss/polina-text-to-speech",
+  "launcherSha256": "e8c2f06f448acd65745756321232b342dd2e547f3cb927ef005fedf4ae5c5efe"
+}

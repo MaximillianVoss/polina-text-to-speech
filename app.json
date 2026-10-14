@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Text to Speech",
+    "slug": "assignment-14-text-to-speech",
+    "version": "1.0.0",
+    "orientation": "default",
+    "userInterfaceStyle": "light",
+    "platforms": ["ios", "android", "web"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    }
+  }
+}
